@@ -1,0 +1,8 @@
+__pycache__/
+*.pyc
+.env
+.env.*
+!.env.example
+leads.csv
+drafts.csv
+replies_out.csv
