@@ -1,0 +1,66 @@
+{% extends "base.html" %} {% block title %}Dashboard | Mini Outbound Engine{%
+endblock %} {% block content %}
+<section class="intro">
+  <div>
+    <p class="eyebrow">Outbound control room</p>
+    <h1>Review your pipeline.</h1>
+    <p class="muted">
+      SQLite-backed lead scoring, drafts, and reply handling. Nothing sends
+      automatically.
+    </p>
+  </div>
+  <form
+    class="upload"
+    action="/leads/import"
+    method="post"
+    enctype="multipart/form-data"
+  >
+    <label for="file">Import companies CSV</label>
+    <input id="file" name="file" type="file" accept=".csv" required />
+    <button type="submit">Import leads</button>
+  </form>
+</section>
+<section class="stats">
+  <div><span>All leads</span><strong>{{ counts.leads }}</strong></div>
+  <div><span>High fit</span><strong>{{ counts.high_fit }}</strong></div>
+  <div><span>Drafts to review</span><strong>{{ counts.drafts }}</strong></div>
+  <div><span>Replies</span><strong>{{ counts.replies }}</strong></div>
+</section>
+<section class="panel">
+  <div class="panel-heading">
+    <h2>Ranked leads</h2>
+    <span class="muted">SQLite source of truth</span>
+  </div>
+  {% if leads %}
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Score</th>
+          <th>Company</th>
+          <th>Website</th>
+          <th>Reason</th>
+          <th>Status</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for lead in leads %}
+        <tr>
+          <td><span class="score">{{ lead.score }}</span></td>
+          <td><a href="/leads/{{ lead.id }}">{{ lead.name }}</a></td>
+          <td>{{ lead.website }}</td>
+          <td>{{ lead.reason or 'Not scored yet' }}</td>
+          <td><span class="status">{{ lead.status }}</span></td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div class="empty">
+    <h3>No leads yet</h3>
+    <p>Import a CSV to create the first local records.</p>
+  </div>
+  {% endif %}
+</section>
+{% endblock %}

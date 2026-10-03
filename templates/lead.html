@@ -1,0 +1,33 @@
+{% extends "base.html" %} {% block title %}{{ lead.name }} | Mini Outbound
+Engine{% endblock %} {% block content %}
+<a class="back" href="/">Back to leads</a>
+<section class="detail-head">
+  <div>
+    <p class="eyebrow">Lead detail</p>
+    <h1>{{ lead.name }}</h1>
+    <p class="muted">
+      {{ lead.website }}{% if lead.contact_email %} · {{ lead.contact_email }}{%
+      endif %}
+    </p>
+  </div>
+  <div class="big-score">{{ lead.score }}<small>/100</small></div>
+</section>
+<div class="detail-grid">
+  <section class="panel">
+    <h2>Scoring reason</h2>
+    <p>{{ lead.reason or 'Not scored yet.' }}</p>
+  </section>
+  <section class="panel">
+    <h2>Verified outreach context</h2>
+    <p>
+      {{ lead.context or 'NO_HOOK: no explicit job post, news, or context
+      supplied.' }}
+    </p>
+  </section>
+</div>
+{% if lead.site_text %}
+<section class="panel">
+  <h2>Scraped site text</h2>
+  <p class="site-text">{{ lead.site_text }}</p>
+</section>
+{% endif %} {% endblock %}
