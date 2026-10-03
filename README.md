@@ -65,7 +65,7 @@ flowchart LR
 ```powershell
 uv run engine.py
 uv run python -m unittest test_engine.py
-````
+```
 
 See `handoff.md` for the current implementation status and the short Loom walkthrough outline.
 

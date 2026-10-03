@@ -27,6 +27,9 @@ h3 { font-size: 24px; margin: 0 0 8px; }
 .upload input { max-width: 220px; }
 button { background: var(--accent); border: 0; color: white; cursor: pointer; font: 700 13px Arial, sans-serif; padding: 10px 14px; }
 button:hover { background: var(--accent-dark); }
+.quiet { background: transparent; border: 1px solid var(--line); color: var(--ink); }
+.quiet:hover { background: var(--paper); }
+.inline { display: inline-block; margin: 0 4px 4px 0; }
 .stats { display: grid; gap: 12px; grid-template-columns: repeat(4, 1fr); margin: 42px 0 24px; }
 .stats div { background: var(--panel); border-top: 3px solid var(--green); padding: 18px; }
 .stats span { color: var(--muted); display: block; font: 12px Arial, sans-serif; text-transform: uppercase; }

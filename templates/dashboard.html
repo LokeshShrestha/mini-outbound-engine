@@ -63,4 +63,83 @@ endblock %} {% block content %}
   </div>
   {% endif %}
 </section>
+<section class="panel">
+  <div class="panel-heading">
+    <h2>Drafts awaiting review</h2>
+    <span class="muted">Approval changes state only</span>
+  </div>
+  {% if drafts %}
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Company</th>
+          <th>First line</th>
+          <th>Status</th>
+          <th>Review</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for draft in drafts %}
+        <tr>
+          <td>{{ draft.name }}</td>
+          <td>{{ draft.first_line }}</td>
+          <td><span class="status">{{ draft.status }}</span></td>
+          <td>
+            <form
+              class="inline"
+              action="/drafts/{{ draft.id }}/approved"
+              method="post"
+            >
+              <button type="submit">Approve</button>
+            </form>
+            <form
+              class="inline"
+              action="/drafts/{{ draft.id }}/rejected"
+              method="post"
+            >
+              <button class="quiet" type="submit">Reject</button>
+            </form>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div class="empty"><p>No drafts have been persisted yet.</p></div>
+  {% endif %}
+</section>
+<section class="panel">
+  <div class="panel-heading">
+    <h2>Recent replies</h2>
+    <span class="muted">Classified and held for review</span>
+  </div>
+  {% if replies %}
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Contact</th>
+          <th>Label</th>
+          <th>Response</th>
+          <th>Status</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for reply in replies %}
+        <tr>
+          <td>{{ reply.name or reply.email }}</td>
+          <td><span class="status">{{ reply.label }}</span></td>
+          <td>{{ reply.response }}</td>
+          <td>{{ reply.status }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div class="empty"><p>No replies have been persisted yet.</p></div>
+  {% endif %}
+</section>
 {% endblock %}
