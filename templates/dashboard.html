@@ -9,22 +9,39 @@ endblock %} {% block content %}
       automatically.
     </p>
   </div>
-  <form
-    class="upload"
-    action="/leads/import"
-    method="post"
-    enctype="multipart/form-data"
-  >
-    <label for="file">Import companies CSV</label>
-    <input id="file" name="file" type="file" accept=".csv" required />
-    <button type="submit">Import leads</button>
+  <form class="discover" action="/leads/discover" method="post">
+    <label for="company_type">Company type</label>
+    <input id="company_type" name="company_type" placeholder="software, clinic, agency" required />
+    <label for="location">Location</label>
+    <input id="location" name="location" placeholder="Raleigh, NC" required />
+    <label for="keywords">Keywords <span>(optional)</span></label>
+    <input id="keywords" name="keywords" placeholder="AI, logistics, startup" />
+    <label for="limit">Number of companies</label>
+    <input id="limit" name="limit" type="number" min="1" max="100" value="25" required />
+    <button type="submit">Find companies</button>
   </form>
 </section>
+{% if message %}<div class="notice success">{{ message }}</div>{% endif %}
+{% if error %}<div class="notice error">{{ error }}</div>{% endif %}
 <section class="stats">
   <div><span>All leads</span><strong>{{ counts.leads }}</strong></div>
   <div><span>High fit</span><strong>{{ counts.high_fit }}</strong></div>
   <div><span>Drafts to review</span><strong>{{ counts.drafts }}</strong></div>
   <div><span>Replies</span><strong>{{ counts.replies }}</strong></div>
+</section>
+<section class="actions">
+  <form action="/pipeline/score" method="post">
+    <h2>Score discovered leads</h2>
+    <p>Fetch websites and score new records against the ICP.</p>
+    <button type="submit">Score new leads</button>
+  </form>
+  <form action="/pipeline/drafts" method="post">
+    <h2>Draft outreach</h2>
+    <p>Create grounded drafts for leads above your score threshold.</p>
+    <label for="min_score">Minimum score</label>
+    <input id="min_score" name="min_score" type="number" min="0" max="100" value="60" />
+    <button type="submit">Create drafts</button>
+  </form>
 </section>
 <section class="panel">
   <div class="panel-heading">
@@ -59,9 +76,22 @@ endblock %} {% block content %}
   {% else %}
   <div class="empty">
     <h3>No leads yet</h3>
-    <p>Import a CSV to create the first local records.</p>
+    <p>Use the search form above to find companies and create local records.</p>
   </div>
   {% endif %}
+</section>
+<section class="panel reply-form">
+  <div class="panel-heading"><h2>Process an inbound reply</h2><span class="muted">CRM updates are off by default</span></div>
+  <form action="/replies/process" method="post">
+    <div class="form-grid">
+      <input name="name" placeholder="Contact name" />
+      <input name="email" type="email" placeholder="Contact email" />
+      <input name="deal_id" placeholder="HubSpot deal ID (optional)" />
+    </div>
+    <textarea name="reply_text" rows="4" placeholder="Paste the inbound reply here" required></textarea>
+    <label class="check"><input name="update_crm" type="checkbox" /> Update HubSpot after classification</label>
+    <button type="submit">Classify reply</button>
+  </form>
 </section>
 <section class="panel">
   <div class="panel-heading">

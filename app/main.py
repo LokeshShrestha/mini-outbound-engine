@@ -4,11 +4,9 @@
 # ///
 from __future__ import annotations
 
-import csv
-import io
 from pathlib import Path
 
-from fastapi import FastAPI, File, HTTPException, Request, UploadFile
+from fastapi import FastAPI, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
@@ -24,6 +22,8 @@ from app.db import (
     update_status,
     upsert_lead,
 )
+from app.discovery import DiscoveryError, discover_companies
+from app.workflows import WorkflowError, generate_drafts, process_reply, score_new_leads
 
 ROOT = Path(__file__).resolve().parent.parent
 app = FastAPI(title="Mini Outbound Engine")
@@ -46,6 +46,8 @@ def dashboard(request: Request):
             "leads": list_leads(),
             "drafts": list_drafts(),
             "replies": list_replies(),
+            "message": request.query_params.get("message", ""),
+            "error": request.query_params.get("error", ""),
         },
     )
 
@@ -62,20 +64,58 @@ def lead_detail(request: Request, lead_id: int):
     )
 
 
-@app.post("/leads/import")
-def import_leads(file: UploadFile = File(...)):
-    if not file.filename or not file.filename.lower().endswith(".csv"):
-        raise HTTPException(status_code=400, detail="Upload a CSV file")
-    content = file.file.read().decode("utf-8-sig")
-    rows = csv.DictReader(io.StringIO(content))
-    if not {"name", "website"}.issubset(rows.fieldnames or set()):
-        raise HTTPException(status_code=400, detail="CSV requires name and website columns")
-    imported = 0
-    for row in rows:
-        if row.get("name", "").strip() and row.get("website", "").strip():
-            upsert_lead(row)
-            imported += 1
-    return RedirectResponse(url=f"/?imported={imported}", status_code=303)
+@app.post("/leads/discover")
+def discover_leads(
+    company_type: str = Form(...),
+    location: str = Form(...),
+    keywords: str = Form(""),
+    limit: int = Form(25),
+):
+    try:
+        companies = discover_companies(company_type, location, keywords, limit)
+    except (DiscoveryError, ValueError, RuntimeError) as error:
+        return RedirectResponse(url=f"/?error={str(error)}", status_code=303)
+    for company in companies:
+        upsert_lead(company)
+    return RedirectResponse(
+        url=f"/?message=Found {len(companies)} companies near {location}",
+        status_code=303,
+    )
+
+
+@app.post("/pipeline/score")
+def score_pipeline():
+    try:
+        processed = score_new_leads()
+    except WorkflowError as error:
+        return RedirectResponse(url=f"/?error={str(error)}", status_code=303)
+    return RedirectResponse(url=f"/?message=Scored {processed} new leads", status_code=303)
+
+
+@app.post("/pipeline/drafts")
+def draft_pipeline(min_score: int = Form(60)):
+    try:
+        created = generate_drafts(min_score)
+    except WorkflowError as error:
+        return RedirectResponse(url=f"/?error={str(error)}", status_code=303)
+    return RedirectResponse(url=f"/?message=Created {created} drafts", status_code=303)
+
+
+@app.post("/replies/process")
+def reply_pipeline(
+    email: str = Form(""),
+    name: str = Form(""),
+    reply_text: str = Form(...),
+    deal_id: str = Form(""),
+    update_crm: bool = Form(False),
+):
+    if not reply_text.strip():
+        return RedirectResponse(url="/?error=Reply text is required", status_code=303)
+    try:
+        label = process_reply(email, name, reply_text, deal_id, dry_run=not update_crm)
+    except (WorkflowError, RuntimeError) as error:
+        return RedirectResponse(url=f"/?error={str(error)}", status_code=303)
+    return RedirectResponse(url=f"/?message=Reply classified as {label}", status_code=303)
 
 
 @app.post("/drafts/{draft_id}/{status}")

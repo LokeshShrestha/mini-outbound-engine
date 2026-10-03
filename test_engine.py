@@ -1,7 +1,7 @@
 import unittest
 
 from engine import build_draft_prompt, classify
-from score import verified_context
+from app.workflows import verified_context
 
 
 class EngineTests(unittest.TestCase):

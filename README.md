@@ -7,31 +7,33 @@ Nothing sends automatically. Outreach and reply drafts are written with `status=
 
 ## Quick start
 
-Install [uv](https://docs.astral.sh/uv/), then run:
+Install [uv](https://docs.astral.sh/uv/), then run the web app:
 
 ```powershell
-$env:OPENROUTER_API_KEY = "sk-or-v1-..."
-uv run score.py --input companies.csv --limit 6
-uv run draft.py --min-score 60
-uv run replies.py --dry-run
 uv run app/main.py
 ```
 
-The first three commands run the batch pipeline. The last command starts the local review dashboard at `http://127.0.0.1:8000`.
+Open `http://127.0.0.1:8000`.
 
-The durable application state is stored in SQLite at `data/outbound.db`. CSV files remain useful as import/export files and demo fixtures.
+The frontend discovers companies, scores leads, creates drafts, and processes replies. The durable application state is stored in SQLite at `data/outbound.db`.
 
 Set `OPENROUTER_MODEL` to override the default model. Set `SENDER_NAME` to add a signature. Set `HUBSPOT_API_KEY` only when you are ready to update CRM records, then omit `--dry-run`.
 
-## Input files
+## Frontend inputs
 
-`companies.csv` requires `name` and `website`; `contact_email` is optional. Optional `context`, `job_post`, and `news` columns provide verified personalization evidence. Website text is used for scoring only and does not count as an outreach hook by itself.
+The dashboard accepts:
 
-`replies.csv` requires `reply_text`; `email`, `name`, and `deal_id` are optional. Reply labels are `interested`, `not_now`, `wrong_person`, `unsubscribe`, and `out_of_office`.
+- company type, such as software, clinic, agency, or logistics
+- location, such as Raleigh, NC or London, UK
+- optional search keywords
+- result limit, from 1 to 100
+- inbound reply text, with optional contact and HubSpot deal details
+
+Company discovery uses OpenStreetMap Nominatim and Overpass. These services require no API key. Results are stored directly in SQLite; there is no CSV upload step.
 
 ## Local dashboard
 
-SQLite is now the source of truth for the local UI. The database is created at `data/outbound.db` and is intentionally ignored by Git. CSV import is explicit; starting the app does not silently migrate files.
+SQLite is the source of truth for the local UI. The database is created at `data/outbound.db` and is intentionally ignored by Git.
 
 Start the dashboard with:
 
@@ -39,20 +41,20 @@ Start the dashboard with:
 uv run app/main.py
 ```
 
-Open `http://127.0.0.1:8000`. Import `companies.csv` from the dashboard, then use the CLI jobs to score leads, generate drafts, and classify replies. Refresh the dashboard to review persisted results. Approve/reject controls change review state only; this project never sends email.
+Open `http://127.0.0.1:8000`. Search for companies from the dashboard, score the discovered leads, generate outreach drafts, and paste inbound replies for classification. Approve/reject controls change review state only; this project never sends email.
 
 ## Workflow
 
 ```mermaid
 flowchart LR
-    A[Company CSV] --> B[FastAPI import]
+    A[Frontend search form] --> B[OpenStreetMap discovery]
     B --> C[(SQLite)]
     C --> D[Fetch and score]
     D --> E[Draft outreach]
     E --> F{Human approval}
     F -->|approved manually| G[Send outside this tool]
     F -->|needs changes| E
-    H[Inbound replies.csv] --> I[Classify reply]
+    H[Frontend reply form] --> I[Classify reply]
     I --> J[Draft response]
     I --> K[Update HubSpot]
     J --> L[(SQLite replies)]
@@ -67,42 +69,43 @@ flowchart LR
 
 ```powershell
 uv run engine.py
-uv run --with requests --with beautifulsoup4 python -m unittest test_engine.py
+uv run --with requests --with beautifulsoup4 --with fastapi --with uvicorn --with jinja2 --with python-multipart python -m unittest test_engine.py
 ```
 
 The dashboard uses FastAPI, Uvicorn, Jinja2, and `python-multipart`; `uv run app/main.py` resolves those inline dependencies automatically.
 
 ## How the flow works
 
-### 1. Source and score leads
+### 1. Discover and score leads
 
-`companies.csv` is the input queue. The dashboard imports it into SQLite, while `score.py` can also process it directly as a batch job. The scorer skips names already present in `leads.csv`, calls `engine.fetch()` to retrieve readable website text, and stores the scored lead in SQLite as well as the CSV output. The page text is sent to OpenRouter with the ICP from `icp.md`; the model must return a `SCORE:` and `REASON:` pair.
+The dashboard sends company type, location, keywords, and result limit to `app.discovery`. Nominatim resolves the location and Overpass searches nearby OpenStreetMap businesses. Each result is stored in SQLite immediately.
 
-The result is normalized by `engine.parse_score()`, stored with the company data, sorted from highest to lowest score, and written to `leads.csv`. The same lead is persisted in SQLite for the dashboard. Website text is used as scoring evidence only. A lead gets outreach context only when the input row explicitly includes `context`, `job_post`, or `news`.
+The Score new leads action fetches reachable websites, sends the text and `icp.md` to OpenRouter, normalizes the `SCORE:` and `REASON:` response, and updates the lead in SQLite. Website text is scoring evidence only; outreach hooks require explicit verified context.
 
 ### 2. Personalize, then wait for approval
 
-`draft.py` reads `leads.csv` and processes leads at or above `--min-score`. It calls `engine.build_draft_prompt()` to construct a constrained prompt and `engine.llm()` to generate a first line and short email.
+The Create drafts action processes scored leads above the selected threshold. It calls `engine.build_draft_prompt()` to construct a constrained prompt and `engine.llm()` to generate a first line and short email.
 
-When verified context exists, the model may use it for the hook. When it does not, the prompt contains a literal `NO_HOOK` fallback that discloses there is no specific trigger. The result is parsed by `engine.parse_draft()`, optionally gets the `SENDER_NAME` signature, appended to `drafts.csv`, and persisted in SQLite with `status=needs_approval`.
+When verified context exists, the model may use it for the hook. When it does not, the prompt contains a literal `NO_HOOK` fallback that discloses there is no specific trigger. The result is parsed by `engine.parse_draft()` and persisted in SQLite with `status=needs_approval`.
 
-There is no send function. A person reviews the CSV, edits or approves the draft, and sends it through their normal email process.
+There is no send function. A person reviews the dashboard, edits or approves the draft, and sends it through their normal email process.
 
 ### 3. Classify replies and update CRM
 
-`replies.py` reads inbound messages from `replies.csv`. `engine.classify()` handles unsubscribe and out-of-office phrases locally, then sends ambiguous replies to OpenRouter. Unknown model output falls back to `not_now` so a reply is held rather than dropped.
+The reply form accepts an inbound message. `engine.classify()` handles unsubscribe and out-of-office phrases locally, then sends ambiguous replies to OpenRouter. Unknown model output falls back to `not_now` so a reply is held rather than dropped.
 
-`engine.draft_reply()` uses fixed safe responses for unsubscribe and out-of-office messages and the reply model for the other labels. Unless `--dry-run` is used, `engine.crm_update()` upserts the contact in HubSpot and patches the supplied deal stage. The final response, label, CRM result, and `status=needs_approval` are written to `replies_out.csv` and persisted in SQLite for dashboard review.
+`engine.draft_reply()` uses fixed safe responses for unsubscribe and out-of-office messages and the reply model for the other labels. HubSpot updates are opt-in through the checkbox; otherwise the result is a dry run. The response, label, CRM result, and `status=needs_approval` are persisted in SQLite for dashboard review.
 
 ## What is used
 
-- **Python 3.11+:** scripts, CSV processing, prompt construction, and tests.
+- **Python 3.11+:** web application, discovery, prompt construction, and tests.
 - **uv:** runs each script with its inline dependency metadata without a committed virtual environment.
 - **Requests:** fetches company pages and calls OpenRouter and HubSpot over HTTPS.
 - **BeautifulSoup:** removes scripts and presentation markup, then extracts readable website text.
 - **OpenRouter:** provides the scoring, outreach-drafting, and ambiguous-reply classification model. `OPENROUTER_MODEL` selects the model.
 - **SQLite:** stores leads, drafts, replies, statuses, and pipeline state for the dashboard.
-- **CSV files:** provide batch inputs, exports, and demo fixtures; they can be imported into Google Sheets.
+- **OpenStreetMap Nominatim:** resolves the location entered in the frontend.
+- **OpenStreetMap Overpass:** discovers nearby businesses without an API key.
 - **HubSpot API:** optionally upserts contacts and updates deals in the reply stage.
 - **Mermaid:** documents the pipeline in this README; it is not a runtime dependency.
 
@@ -122,16 +125,12 @@ There is no send function. A person reviews the CSV, edits or approves the draft
 - `crm_update(email, name, label, deal_id)`: updates HubSpot contact lifecycle and, when supplied, the deal stage.
 - `demo()`: runs lightweight assertions without requiring an API key.
 
-### Stage scripts
-
-- `score.py`: stage 1 orchestration, input reading, resume behavior, rate pacing, ranking, and `leads.csv` output.
-- `draft.py`: stage 2 orchestration, score threshold filtering, duplicate prevention, signatures, and approval-state output.
-- `replies.py`: stage 3 orchestration, input validation, dry-run behavior, classification, CRM updates, and response output.
-
 ### Dashboard components
 
-- `app/main.py`: FastAPI application, dashboard routes, CSV upload, and approval-state endpoints.
+- `app/main.py`: FastAPI application, discovery/scoring/drafting/reply routes, and approval-state endpoints.
 - `app/db.py`: SQLite schema, connections, lead upserts, draft/reply persistence, counts, and status updates.
+- `app/discovery.py`: free OpenStreetMap geocoding and nearby company discovery.
+- `app/workflows.py`: browser-triggered scoring, draft generation, reply processing, and `NO_HOOK` context selection.
 - `templates/base.html`: shared page shell and stylesheet link.
 - `templates/dashboard.html`: summary cards, lead ranking, draft review, and recent replies.
 - `templates/lead.html`: lead score, reason, verified context, and scraped text detail.
@@ -140,8 +139,6 @@ There is no send function. A person reviews the CSV, edits or approves the draft
 ### Configuration and data
 
 - `icp.md`: the human-readable ideal-customer profile supplied to the scoring model.
-- `companies.csv`: company source list; replace the six-row sample with an Apollo, Google Maps, or job-board export.
-- `replies.csv`: sample inbound replies and optional HubSpot deal IDs.
 - `test_engine.py`: regression tests for hook safety and deterministic reply paths.
 - `data/outbound.db`: local SQLite database created at runtime; ignored by Git.
 - `.gitignore`: keeps API secrets, Python caches, and generated outputs out of version control.

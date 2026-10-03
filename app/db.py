@@ -96,6 +96,14 @@ def list_leads(path: Path = DEFAULT_DB) -> list[sqlite3.Row]:
         ).fetchall()
 
 
+def list_unscored_leads(path: Path = DEFAULT_DB) -> list[sqlite3.Row]:
+    init_db(path)
+    with connect(path) as connection:
+        return connection.execute(
+            "SELECT * FROM leads WHERE score = 0 ORDER BY created_at LIMIT 100"
+        ).fetchall()
+
+
 def get_lead(lead_id: int, path: Path = DEFAULT_DB) -> sqlite3.Row | None:
     init_db(path)
     with connect(path) as connection:
@@ -106,6 +114,14 @@ def get_lead_by_website(website: str, path: Path = DEFAULT_DB) -> sqlite3.Row | 
     init_db(path)
     with connect(path) as connection:
         return connection.execute("SELECT * FROM leads WHERE website = ?", (website,)).fetchone()
+
+
+def has_draft(lead_id: int, path: Path = DEFAULT_DB) -> bool:
+    init_db(path)
+    with connect(path) as connection:
+        return connection.execute(
+            "SELECT 1 FROM drafts WHERE lead_id = ? LIMIT 1", (lead_id,)
+        ).fetchone() is not None
 
 
 def list_drafts(path: Path = DEFAULT_DB) -> list[sqlite3.Row]:
@@ -162,6 +178,25 @@ def upsert_lead(row: dict[str, Any], path: Path = DEFAULT_DB) -> int:
             (row.get("name", "").strip(), row.get("website", "").strip()),
         ).fetchone()
         return int(lead[0])
+
+
+def update_lead_score(
+    lead_id: int,
+    score: int,
+    reason: str,
+    site_text: str,
+    path: Path = DEFAULT_DB,
+) -> None:
+    init_db(path)
+    with connect(path) as connection:
+        connection.execute(
+            """
+            UPDATE leads
+            SET score = ?, reason = ?, site_text = ?, status = 'scored', updated_at = ?
+            WHERE id = ?
+            """,
+            (max(0, min(score, 100)), reason.strip(), site_text.strip(), now(), lead_id),
+        )
 
 
 def create_draft(row: dict[str, Any], path: Path = DEFAULT_DB) -> int:
