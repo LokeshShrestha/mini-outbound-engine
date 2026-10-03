@@ -1,10 +1,15 @@
 # /// script
 # requires-python = ">=3.11"
-# dependencies = ["fastapi", "uvicorn", "jinja2", "python-multipart"]
+# dependencies = ["fastapi", "uvicorn", "jinja2", "python-multipart", "requests", "beautifulsoup4"]
 # ///
 from __future__ import annotations
 
+import sys
 from pathlib import Path
+
+ROOT = Path(__file__).resolve().parent.parent
+if __package__ in {None, ""} and str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
 
 from fastapi import FastAPI, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
@@ -25,7 +30,6 @@ from app.db import (
 from app.discovery import DiscoveryError, discover_companies
 from app.workflows import WorkflowError, generate_drafts, process_reply, score_new_leads
 
-ROOT = Path(__file__).resolve().parent.parent
 app = FastAPI(title="Mini Outbound Engine")
 app.mount("/static", StaticFiles(directory=ROOT / "static"), name="static")
 templates = Jinja2Templates(directory=ROOT / "templates")
