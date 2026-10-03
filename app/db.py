@@ -102,6 +102,32 @@ def get_lead(lead_id: int, path: Path = DEFAULT_DB) -> sqlite3.Row | None:
         return connection.execute("SELECT * FROM leads WHERE id = ?", (lead_id,)).fetchone()
 
 
+def get_lead_by_website(website: str, path: Path = DEFAULT_DB) -> sqlite3.Row | None:
+    init_db(path)
+    with connect(path) as connection:
+        return connection.execute("SELECT * FROM leads WHERE website = ?", (website,)).fetchone()
+
+
+def list_drafts(path: Path = DEFAULT_DB) -> list[sqlite3.Row]:
+    init_db(path)
+    with connect(path) as connection:
+        return connection.execute(
+            """
+            SELECT drafts.*, leads.name, leads.website
+            FROM drafts JOIN leads ON leads.id = drafts.lead_id
+            ORDER BY drafts.created_at DESC
+            """
+        ).fetchall()
+
+
+def list_replies(path: Path = DEFAULT_DB) -> list[sqlite3.Row]:
+    init_db(path)
+    with connect(path) as connection:
+        return connection.execute(
+            "SELECT * FROM replies ORDER BY created_at DESC"
+        ).fetchall()
+
+
 def upsert_lead(row: dict[str, Any], path: Path = DEFAULT_DB) -> int:
     init_db(path)
     timestamp = now()
@@ -136,6 +162,56 @@ def upsert_lead(row: dict[str, Any], path: Path = DEFAULT_DB) -> int:
             (row.get("name", "").strip(), row.get("website", "").strip()),
         ).fetchone()
         return int(lead[0])
+
+
+def create_draft(row: dict[str, Any], path: Path = DEFAULT_DB) -> int:
+    lead = get_lead_by_website(row.get("website", "").strip(), path)
+    if lead is None:
+        raise ValueError("draft requires an existing lead")
+    timestamp = now()
+    with connect(path) as connection:
+        cursor = connection.execute(
+            """
+            INSERT INTO drafts (lead_id, first_line, email, status, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?)
+            """,
+            (
+                lead["id"],
+                row.get("first_line", "").strip(),
+                row.get("email", "").strip(),
+                row.get("status", "needs_approval"),
+                timestamp,
+                timestamp,
+            ),
+        )
+        return int(cursor.lastrowid)
+
+
+def create_reply(row: dict[str, Any], path: Path = DEFAULT_DB) -> int:
+    lead = get_lead_by_website(row.get("website", "").strip(), path) if row.get("website") else None
+    timestamp = now()
+    with connect(path) as connection:
+        cursor = connection.execute(
+            """
+            INSERT INTO replies (lead_id, email, name, reply_text, deal_id, label, response,
+                                 crm_result, status, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                lead["id"] if lead else None,
+                row.get("email", "").strip(),
+                row.get("name", "").strip(),
+                row.get("reply_text", "").strip(),
+                row.get("deal_id", "").strip(),
+                row.get("label", "").strip(),
+                row.get("response", "").strip(),
+                row.get("crm", "").strip(),
+                row.get("status", "needs_approval"),
+                timestamp,
+                timestamp,
+            ),
+        )
+        return int(cursor.lastrowid)
 
 
 def update_status(table: str, record_id: int, status: str, path: Path = DEFAULT_DB) -> None:

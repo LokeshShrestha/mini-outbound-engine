@@ -13,6 +13,7 @@ import sys
 import time
 from pathlib import Path
 
+from app.db import init_db, upsert_lead
 from engine import build_score_prompt, fetch, llm, parse_score, SCORE_SYSTEM
 
 ICP = Path(__file__).with_name("icp.md")
@@ -43,6 +44,7 @@ def main() -> None:
     ap.add_argument("--delay", type=float, default=0.2, help="seconds between requests")
     args = ap.parse_args()
 
+    init_db()
     icp = ICP.read_text(encoding="utf-8")
     leads = read_csv(Path(__file__).with_name(args.input))
     done = {r["name"] for r in read_csv(OUT)}
@@ -79,6 +81,7 @@ def main() -> None:
                 "context": verified_context(row),
             }
         )
+        upsert_lead({**scored[-1], "site_text": text})
         done.add(name)
         print(f"{score}  {reason}")
         new += 1

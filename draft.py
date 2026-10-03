@@ -16,6 +16,7 @@ import sys
 import time
 from pathlib import Path
 
+from app.db import create_draft, init_db
 from engine import DRAFT_SYSTEM, build_draft_prompt, llm, parse_draft
 
 ROOT = Path(__file__).parent
@@ -30,6 +31,7 @@ def main() -> None:
     ap.add_argument("--delay", type=float, default=0.2)
     args = ap.parse_args()
 
+    init_db()
     sig = os.environ.get("SENDER_NAME", "").strip()
     out_path = ROOT / "drafts.csv"
     with (ROOT / args.input).open(newline="", encoding="utf-8-sig") as f:
@@ -62,6 +64,7 @@ def main() -> None:
                 "status": "needs_approval",
             }
         )
+        create_draft(rows[-1])
         print("ok")
         new += 1
         if args.limit and new >= args.limit:

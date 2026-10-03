@@ -16,6 +16,7 @@ import os
 import sys
 from pathlib import Path
 
+from app.db import create_reply, init_db
 from engine import classify, crm_update, draft_reply
 
 ROOT = Path(__file__).parent
@@ -28,6 +29,7 @@ def main() -> None:
     ap.add_argument("--dry-run", action="store_true", help="classify + draft, skip HubSpot")
     args = ap.parse_args()
 
+    init_db()
     path = ROOT / args.input
     if not path.exists():
         sys.exit(f"{path.name} not found. Expected columns: email,name,reply_text[,deal_id]")
@@ -58,6 +60,7 @@ def main() -> None:
                 "status": "needs_approval",
             }
         )
+        create_reply(out[-1])
         print(crm)
 
     dest = ROOT / "replies_out.csv"

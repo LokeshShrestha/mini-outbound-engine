@@ -13,7 +13,17 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
-from app.db import DEFAULT_DB, dashboard_counts, get_lead, init_db, list_leads, update_status, upsert_lead
+from app.db import (
+    DEFAULT_DB,
+    dashboard_counts,
+    get_lead,
+    init_db,
+    list_drafts,
+    list_leads,
+    list_replies,
+    update_status,
+    upsert_lead,
+)
 
 ROOT = Path(__file__).resolve().parent.parent
 app = FastAPI(title="Mini Outbound Engine")
@@ -31,7 +41,12 @@ def dashboard(request: Request):
     return templates.TemplateResponse(
         request=request,
         name="dashboard.html",
-        context={"counts": dashboard_counts(), "leads": list_leads()},
+        context={
+            "counts": dashboard_counts(),
+            "leads": list_leads(),
+            "drafts": list_drafts(),
+            "replies": list_replies(),
+        },
     )
 
 

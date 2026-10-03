@@ -26,13 +26,25 @@ Set `OPENROUTER_MODEL` to override the default model. Set `SENDER_NAME` to add a
 
 `replies.csv` requires `reply_text`; `email`, `name`, and `deal_id` are optional. Reply labels are `interested`, `not_now`, `wrong_person`, `unsubscribe`, and `out_of_office`.
 
+## Local dashboard
+
+SQLite is now the source of truth for the local UI. The database is created at `data/outbound.db` and is intentionally ignored by Git. CSV import is explicit; starting the app does not silently migrate files.
+
+Start the dashboard with:
+
+```powershell
+uv run app/main.py
+```
+
+Open `http://127.0.0.1:8000`. Import `companies.csv` from the dashboard, then use the CLI jobs to score leads, generate drafts, and classify replies. Refresh the dashboard to review persisted results. Approve/reject controls change review state only; this project never sends email.
+
 ## Workflow
 
 ```mermaid
 flowchart LR
-    A[Company CSV] --> B[Fetch website]
-    B --> C[Score against ICP]
-    C --> D[Ranked leads.csv]
+    A[Company CSV] --> B[FastAPI import]
+    B --> C[(SQLite)]
+    C --> D[Fetch and score]
     D --> E[Draft outreach]
     E --> F{Human approval}
     F -->|approved manually| G[Send outside this tool]
@@ -40,23 +52,20 @@ flowchart LR
     H[Inbound replies.csv] --> I[Classify reply]
     I --> J[Draft response]
     I --> K[Update HubSpot]
-    J --> L[replies_out.csv]
+    J --> L[(SQLite replies)]
 ```
 
 ## Guardrails
 
 - `NO_HOOK` is used when no explicit job post, news, or context evidence is supplied.
 - The model is instructed not to invent facts, metrics, people, or triggers.
-- This repository never sends email.
-- HubSpot failures are recorded in the output instead of silently discarded.
-- Keep API keys in environment variables and rotate any key exposed in chat history.
 
 ## Verification
 
 ```powershell
 uv run engine.py
 uv run python -m unittest test_engine.py
-```
+````
 
 See `handoff.md` for the current implementation status and the short Loom walkthrough outline.
 
