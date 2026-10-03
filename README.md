@@ -64,10 +64,10 @@ flowchart LR
 
 ```powershell
 uv run engine.py
-uv run python -m unittest test_engine.py
+uv run --with requests --with beautifulsoup4 python -m unittest test_engine.py
 ```
 
-See `handoff.md` for the current implementation status and the short Loom walkthrough outline.
+The dashboard uses FastAPI, Uvicorn, Jinja2, and `python-multipart`; `uv run app/main.py` resolves those inline dependencies automatically.
 
 ## How the flow works
 
