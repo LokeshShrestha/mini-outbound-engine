@@ -29,6 +29,7 @@ h3 { font-size: 24px; margin: 0 0 8px; }
 .discover input::placeholder { color: #aab8b2; }
 button { background: var(--accent); border: 0; color: white; cursor: pointer; font: 700 13px Arial, sans-serif; padding: 10px 14px; }
 button:hover { background: var(--accent-dark); }
+button:disabled { cursor: wait; opacity: .7; }
 .quiet { background: transparent; border: 1px solid var(--line); color: var(--ink); }
 .quiet:hover { background: var(--paper); }
 .inline { display: inline-block; margin: 0 4px 4px 0; }

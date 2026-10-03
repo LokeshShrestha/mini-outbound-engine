@@ -81,6 +81,11 @@ def discover_leads(
         return RedirectResponse(url=f"/?error={str(error)}", status_code=303)
     for company in companies:
         upsert_lead(company)
+    if not companies:
+        return RedirectResponse(
+            url="/?error=No companies found. Try a broader type, location, or remove keywords.",
+            status_code=303,
+        )
     return RedirectResponse(
         url=f"/?message=Found {len(companies)} companies near {location}",
         status_code=303,
