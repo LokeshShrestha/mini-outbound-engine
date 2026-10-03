@@ -14,9 +14,12 @@ $env:OPENROUTER_API_KEY = "sk-or-v1-..."
 uv run score.py --input companies.csv --limit 6
 uv run draft.py --min-score 60
 uv run replies.py --dry-run
+uv run app/main.py
 ```
 
-The outputs are `leads.csv`, `drafts.csv`, and `replies_out.csv`. Import any CSV into Google Sheets for review.
+The first three commands run the batch pipeline. The last command starts the local review dashboard at `http://127.0.0.1:8000`.
+
+The durable application state is stored in SQLite at `data/outbound.db`. CSV files remain useful as import/export files and demo fixtures.
 
 Set `OPENROUTER_MODEL` to override the default model. Set `SENDER_NAME` to add a signature. Set `HUBSPOT_API_KEY` only when you are ready to update CRM records, then omit `--dry-run`.
 
@@ -73,15 +76,15 @@ The dashboard uses FastAPI, Uvicorn, Jinja2, and `python-multipart`; `uv run app
 
 ### 1. Source and score leads
 
-`companies.csv` is the input queue. `score.py` reads each company, skips names already present in `leads.csv`, and calls `engine.fetch()` to retrieve readable website text. The page text is sent to OpenRouter with the ICP from `icp.md`; the model must return a `SCORE:` and `REASON:` pair.
+`companies.csv` is the input queue. The dashboard imports it into SQLite, while `score.py` can also process it directly as a batch job. The scorer skips names already present in `leads.csv`, calls `engine.fetch()` to retrieve readable website text, and stores the scored lead in SQLite as well as the CSV output. The page text is sent to OpenRouter with the ICP from `icp.md`; the model must return a `SCORE:` and `REASON:` pair.
 
-The result is normalized by `engine.parse_score()`, stored with the company data, sorted from highest to lowest score, and written to `leads.csv`. Website text is used as scoring evidence only. A lead gets outreach context only when the input row explicitly includes `context`, `job_post`, or `news`.
+The result is normalized by `engine.parse_score()`, stored with the company data, sorted from highest to lowest score, and written to `leads.csv`. The same lead is persisted in SQLite for the dashboard. Website text is used as scoring evidence only. A lead gets outreach context only when the input row explicitly includes `context`, `job_post`, or `news`.
 
 ### 2. Personalize, then wait for approval
 
 `draft.py` reads `leads.csv` and processes leads at or above `--min-score`. It calls `engine.build_draft_prompt()` to construct a constrained prompt and `engine.llm()` to generate a first line and short email.
 
-When verified context exists, the model may use it for the hook. When it does not, the prompt contains a literal `NO_HOOK` fallback that discloses there is no specific trigger. The result is parsed by `engine.parse_draft()`, optionally gets the `SENDER_NAME` signature, and is appended to `drafts.csv` with `status=needs_approval`.
+When verified context exists, the model may use it for the hook. When it does not, the prompt contains a literal `NO_HOOK` fallback that discloses there is no specific trigger. The result is parsed by `engine.parse_draft()`, optionally gets the `SENDER_NAME` signature, appended to `drafts.csv`, and persisted in SQLite with `status=needs_approval`.
 
 There is no send function. A person reviews the CSV, edits or approves the draft, and sends it through their normal email process.
 
@@ -89,7 +92,7 @@ There is no send function. A person reviews the CSV, edits or approves the draft
 
 `replies.py` reads inbound messages from `replies.csv`. `engine.classify()` handles unsubscribe and out-of-office phrases locally, then sends ambiguous replies to OpenRouter. Unknown model output falls back to `not_now` so a reply is held rather than dropped.
 
-`engine.draft_reply()` uses fixed safe responses for unsubscribe and out-of-office messages and the reply model for the other labels. Unless `--dry-run` is used, `engine.crm_update()` upserts the contact in HubSpot and patches the supplied deal stage. The final response, label, CRM result, and `status=needs_approval` are written to `replies_out.csv`.
+`engine.draft_reply()` uses fixed safe responses for unsubscribe and out-of-office messages and the reply model for the other labels. Unless `--dry-run` is used, `engine.crm_update()` upserts the contact in HubSpot and patches the supplied deal stage. The final response, label, CRM result, and `status=needs_approval` are written to `replies_out.csv` and persisted in SQLite for dashboard review.
 
 ## What is used
 
@@ -98,7 +101,8 @@ There is no send function. A person reviews the CSV, edits or approves the draft
 - **Requests:** fetches company pages and calls OpenRouter and HubSpot over HTTPS.
 - **BeautifulSoup:** removes scripts and presentation markup, then extracts readable website text.
 - **OpenRouter:** provides the scoring, outreach-drafting, and ambiguous-reply classification model. `OPENROUTER_MODEL` selects the model.
-- **CSV files:** act as the simple local data store and can be imported directly into Google Sheets.
+- **SQLite:** stores leads, drafts, replies, statuses, and pipeline state for the dashboard.
+- **CSV files:** provide batch inputs, exports, and demo fixtures; they can be imported into Google Sheets.
 - **HubSpot API:** optionally upserts contacts and updates deals in the reply stage.
 - **Mermaid:** documents the pipeline in this README; it is not a runtime dependency.
 
@@ -124,11 +128,20 @@ There is no send function. A person reviews the CSV, edits or approves the draft
 - `draft.py`: stage 2 orchestration, score threshold filtering, duplicate prevention, signatures, and approval-state output.
 - `replies.py`: stage 3 orchestration, input validation, dry-run behavior, classification, CRM updates, and response output.
 
+### Dashboard components
+
+- `app/main.py`: FastAPI application, dashboard routes, CSV upload, and approval-state endpoints.
+- `app/db.py`: SQLite schema, connections, lead upserts, draft/reply persistence, counts, and status updates.
+- `templates/base.html`: shared page shell and stylesheet link.
+- `templates/dashboard.html`: summary cards, lead ranking, draft review, and recent replies.
+- `templates/lead.html`: lead score, reason, verified context, and scraped text detail.
+- `static/app.css`: responsive dashboard styling.
+
 ### Configuration and data
 
 - `icp.md`: the human-readable ideal-customer profile supplied to the scoring model.
 - `companies.csv`: company source list; replace the six-row sample with an Apollo, Google Maps, or job-board export.
 - `replies.csv`: sample inbound replies and optional HubSpot deal IDs.
 - `test_engine.py`: regression tests for hook safety and deterministic reply paths.
-- `handoff.md`: implementation status, design decisions, risks, and coordination notes for other agents.
+- `data/outbound.db`: local SQLite database created at runtime; ignored by Git.
 - `.gitignore`: keeps API secrets, Python caches, and generated outputs out of version control.
